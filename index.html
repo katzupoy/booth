@@ -1,0 +1,995 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Booth Voice Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a recording-booth console — script on the left like a lyric sheet, controls rack and cast sheet on the right, takes listed below as a tape log. */
+:root{
+  --bg:#15131a; --surface:#1e1b25; --surface-2:#27232f; --line:#38323f;
+  --ink:#ece6dc; --muted:#9b93a8; --accent:#f2a43a; --accent-ink:#1a1206; --live:#e5484d; --ok:#46a96b;
+  --r-narrator:#9b93a8; --r-hero:#e08a3a; --r-rudy:#7aa6d9; --r-jun:#62b58a; --r-stranger:#d36a8e;
+  --display:"Unbounded", "Arial Black", system-ui, sans-serif;
+  --body:"Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){
+  --bg:#eceef2; --surface:#ffffff; --surface-2:#f4f5f8; --line:#d6d8e0;
+  --ink:#1b1a22; --muted:#5e5b6b; --accent:#b8690a; --accent-ink:#ffffff; --live:#cc2f35; --ok:#2c8a50;
+  --r-narrator:#6b6878; --r-hero:#b5601a; --r-rudy:#2f68a8; --r-jun:#2c8a50; --r-stranger:#a83a62; color-scheme:light } }
+:root[data-theme="light"]{
+  --bg:#eceef2; --surface:#ffffff; --surface-2:#f4f5f8; --line:#d6d8e0;
+  --ink:#1b1a22; --muted:#5e5b6b; --accent:#b8690a; --accent-ink:#ffffff; --live:#cc2f35; --ok:#2c8a50;
+  --r-narrator:#6b6878; --r-hero:#b5601a; --r-rudy:#2f68a8; --r-jun:#2c8a50; --r-stranger:#a83a62; color-scheme:light }
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+button,select,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:14px}
+.brand h1{font:700 26px/1 var(--display);letter-spacing:.02em;margin:0}
+.lamp{display:inline-flex;align-items:center;gap:8px;font:500 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  padding:7px 10px;border:1px solid var(--line);border-radius:4px;color:var(--muted)}
+.lamp i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.lamp.on{color:var(--live);border-color:var(--live)}
+.lamp.on i{background:var(--live);box-shadow:0 0 10px var(--live);animation:pulse 1s infinite alternate}
+@keyframes pulse{to{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.lamp.on i{animation:none}}
+.status{font:400 12px/1.4 var(--mono);color:var(--muted);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.meter{width:140px;height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden}
+.meter b{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+
+.console{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:20px;align-items:start}
+@media (max-width:880px){.console{grid-template-columns:minmax(0,1fr)}}
+.side{display:flex;flex-direction:column;gap:20px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.label{font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+textarea#script{width:100%;min-height:440px;resize:vertical;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;
+  padding:16px;font:16px/1.65 var(--body);color:var(--ink)}
+.stats{display:flex;gap:18px;flex-wrap:wrap;font:400 13px/1 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.stats strong{color:var(--ink);font-weight:500}
+.tag{font:500 11px/1 var(--mono);padding:4px 7px;border-radius:4px;border:1px solid currentColor}
+.tag.good{color:var(--ok)} .tag.warn{color:var(--accent)}
+
+select,input[type=range]{width:100%}
+select{background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:9px 10px}
+input[type=range]{accent-color:var(--accent)}
+.field{display:flex;flex-direction:column;gap:8px}
+.val{font:500 13px/1 var(--mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.ticks{display:flex;justify-content:space-between;font:400 10px/1 var(--mono);color:var(--muted)}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted)}
+.check input{margin-top:3px;accent-color:var(--accent)}
+.check b{color:var(--ink);font-weight:600}
+
+.cast{display:flex;flex-direction:column;gap:10px}
+.castrow{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:8px;align-items:center}
+.who{display:flex;align-items:center;gap:7px;font-weight:600;font-size:14px}
+.who i{width:8px;height:8px;border-radius:2px;flex:none}
+.cast.off .castrow:not(:first-child){opacity:.4}
+
+.btn{border:1px solid var(--line);background:var(--surface-2);border-radius:6px;padding:9px 14px;cursor:pointer;font-weight:500}
+.btn:hover:not(:disabled){border-color:var(--muted)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.rec{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font:700 14px/1 var(--display);letter-spacing:.04em;padding:16px;width:100%}
+.btn.sm{padding:6px 10px;font-size:13px}
+.btn.icon{padding:6px 9px;font-size:12px}
+
+.deck{display:flex;flex-direction:column;gap:12px}
+.transport{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.play{width:46px;height:46px;border-radius:50%;border:none;background:var(--accent);color:var(--accent-ink);cursor:pointer;display:grid;place-items:center;flex:none}
+.play:disabled{opacity:.4;cursor:not-allowed}
+.time{font:500 14px/1 var(--mono);font-variant-numeric:tabular-nums}
+canvas#wave{width:100%;height:96px;display:block;background:var(--surface-2);border-radius:8px;cursor:pointer}
+.empty{color:var(--muted);font-size:14px;padding:6px 0}
+
+.takes{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.take{display:grid;grid-template-columns:40px 116px minmax(0,1fr) auto;gap:12px;align-items:start;padding:10px 0;border-bottom:1px solid var(--line)}
+.take .n{font:500 12px/1 var(--mono);color:var(--muted);padding-top:10px}
+.take select{padding:6px 8px;font-size:13px;border-left:3px solid var(--role)}
+.take textarea{width:100%;background:transparent;border:1px solid transparent;border-radius:6px;padding:6px 8px;resize:vertical;min-height:36px;font:15px/1.5 var(--body);color:var(--ink)}
+.take textarea:hover{border-color:var(--line)}
+.take textarea:focus{border-color:var(--accent);background:var(--surface-2)}
+.take .acts{display:flex;gap:6px;justify-content:flex-end;align-items:center}
+.take .dur{font:400 12px/1 var(--mono);color:var(--muted);min-width:40px;text-align:right;font-variant-numeric:tabular-nums}
+.take.stale .n{color:var(--accent)}
+.take.busy{opacity:.55}
+.take.daymark textarea{font-family:var(--display);font-size:13px;letter-spacing:.04em}
+@media (max-width:640px){.take{grid-template-columns:30px minmax(0,1fr)} .take select,.take textarea,.take .acts{grid-column:2} .take .acts{justify-content:flex-start}}
+.note{font-size:13px;color:var(--muted);max-width:70ch;margin:0}
+.err{color:var(--live);font:400 13px/1.4 var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>BOOTH</h1>
+      <span class="lamp" id="lamp"><i></i><span id="lampText">Off air</span></span>
+    </div>
+    <div class="status"><span id="engineText">Loading voice engine…</span><span class="meter"><b id="meterBar"></b></span></div>
+  </header>
+
+  <div class="console">
+    <section class="panel" aria-labelledby="scriptLabel">
+      <div class="row">
+        <span class="label" id="scriptLabel">Script</span>
+        <div class="stats">
+          <span><strong id="wc">0</strong> words</span>
+          <span>≈ <strong id="est">0:00</strong></span>
+          <span id="lenTag"></span>
+          <button class="btn icon" id="resetScript" title="Put the Gun Store script back">Reset script</button>
+        </div>
+      </div>
+      <textarea id="script" spellcheck="true" aria-label="Script"></textarea>
+      <p class="note">Each paragraph is read in one go so the voice flows like a real narrator. Dialogue in "quotes" is read by the character who says it. A short title line at the top is skipped.</p>
+    </section>
+
+    <div class="side">
+      <aside class="panel" aria-label="Cast">
+        <div class="row"><span class="label">Cast</span>
+          <label class="check" style="margin:0"><input type="checkbox" id="castOn"> <span>Character voices</span></label></div>
+        <div class="cast" id="cast"></div>
+        <p class="note">★ = most natural voices in this engine. Michael sounds the most human of the male voices.</p>
+      </aside>
+
+      <aside class="panel" aria-label="Delivery">
+        <div class="field">
+          <div class="row"><label class="label" for="speed">Speed</label><span class="val" id="speedVal">1×</span></div>
+          <input type="range" id="speed" min="0.75" max="1.5" step="0.05" value="0.95">
+          <div class="ticks"><span>0.75×</span><span>1×</span><span>1.25×</span><span>1.5×</span></div>
+        </div>
+        <div class="field">
+          <div class="row"><label class="label" for="gap">Pause between lines</label><span class="val" id="gapVal">1×</span></div>
+          <input type="range" id="gap" min="0" max="3" step="0.25" value="1">
+          <div class="ticks"><span>0×</span><span>1×</span><span>2×</span><span>3×</span></div>
+        </div>
+        <div class="field">
+          <div class="row"><label class="label" for="para">Pause between paragraphs</label><span class="val" id="paraVal">1×</span></div>
+          <input type="range" id="para" min="0" max="3" step="0.25" value="1">
+          <div class="ticks"><span>0×</span><span>1×</span><span>2×</span><span>3×</span></div>
+        </div>
+        <label class="check"><input type="checkbox" id="gpu"> <span><b>Use graphics card.</b> Much faster. Turn off if recording fails.</span></label>
+        <label class="check"><input type="checkbox" id="fast"> <span><b>Fast mode.</b> Smaller model, quicker on weak PCs, but sounds more robotic.</span></label>
+        <button class="btn rec" id="go" disabled>RECORD VOICEOVER</button>
+        <div class="err" id="err" hidden></div>
+      </aside>
+    </div>
+  </div>
+
+  <section class="panel deck" aria-label="Output">
+    <div class="row">
+      <span class="label">Master take</span>
+      <div class="transport" style="gap:8px">
+        <button class="btn sm" id="dlAll" disabled>Download full WAV</button>
+        <button class="btn sm" id="dlLines" disabled>Download each line</button>
+      </div>
+    </div>
+    <div class="transport">
+      <button class="play" id="play" aria-label="Play" disabled>
+        <svg id="playIcon" width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><path d="M4 2l12 7-12 7z"/></svg>
+      </button>
+      <span class="time" id="time">0:00.0 / 0:00.0</span>
+    </div>
+    <canvas id="wave" aria-label="Waveform, click to seek"></canvas>
+    <span class="label" style="margin-top:6px">Takes</span>
+    <div class="takes" id="takes"><p class="empty">Hit Record and every paragraph and line of dialogue shows up here as its own take. Change a line's speaker or wording, then re-record just that take.</p></div>
+  </section>
+</div>
+
+<script type="text/plain" id="defaultScript">Zombie Outbreak: 30 Days in a Gun Store
+
+This is how you'd survive 30 days in a gun store.
+
+It's a slow Tuesday evening, and you're finishing your shift at a small gun store on Main Street. You've worked here for eight months. Mostly, you dust glass counters, answer the phone, and listen to your boss complain.
+
+Your boss is Rudy. He's sixty-two, an army veteran with a grey beard and a permanent frown, and he's owned this store for thirty years.
+
+"Twenty minutes till closing," you say. "Nobody's coming."
+
+Then the door bursts open.
+
+It's a delivery driver named Jun, out of breath, holding a box he was supposed to drop off an hour ago. "Lock the door," he says. "Something's wrong outside."
+
+Through the front window, you see a woman stumble into the street. A car swerves around her. She doesn't even look at it. She walks straight into a man waiting at the bus stop and bites his shoulder.
+
+Rudy is already moving. He hits the button behind the counter, and the steel shutter starts to roll down over the front windows.
+
+Before it closes, three more customers squeeze in. All of them want the same thing.
+
+"I need a gun. Right now. Any gun."
+
+Rudy tells them no. There are background checks and paperwork, and he's not handing out weapons to panicked strangers. They argue. They yell. And then one of them, a young man in a red cap, grabs a pistol from his own waistband and fires a shot into the ceiling to make a point.
+
+The sound inside the small store is deafening. Your ears ring.
+
+And outside, the street changes.
+
+Within a minute, you hear them. Hands slapping against the steel shutter. Dozens of them. All drawn to that one gunshot.
+
+"Well," Rudy says quietly. "Now everybody knows we're here."
+
+And that was just Day 1.
+
+Day 2.
+
+The three customers leave at dawn. They're sure the police will have things under control. You watch through a gap in the shutter as they run for their car.
+
+They don't make it to the end of the street.
+
+That leaves three of you. You, Rudy, and Jun.
+
+Your phone buzzes with an emergency alert. Stay indoors. Lock all doors. Avoid contact with infected individuals. Then the networks go down.
+
+Here's the first thing you learn, and it's the most important rule in this entire story. The dead are drawn to sound. One gunshot pulled in the whole street. Shooting your way out isn't a plan. It's an invitation.
+
+Day 3.
+
+Time to find out what you actually have.
+
+The store has more than two hundred guns, thousands of rounds of ammunition, knives, flashlights, hunting gear, and a stack of bulletproof vests.
+
+But food?
+
+A vending machine with chips and candy bars. Rudy's mini-fridge, with two sandwiches and some milk. Half a box of protein bars behind the counter. And two cases of bottled water.
+
+"We're sitting in the most dangerous store in town," Jun says, "and we're going to starve in it."
+
+He's right. Remember the rule of threes. About three days without water. About three weeks without food. Every gun in this building won't change that.
+
+Then Rudy remembers something. In the back room, there's a water heater. A normal water heater holds about forty gallons, that's over a hundred and fifty litres of clean water, sitting in a tank. When the water stops, you can drain it from the valve at the bottom.
+
+It's the best news you've had in two days.
+
+Day 4.
+
+You make the store safer.
+
+The steel shutter protects the front, but the back door only has one deadbolt. You drag the heaviest display cabinet in front of it. You stack ammunition crates against the cabinet. Ammunition is heavy, and it makes a good wall.
+
+Rudy sets three rules.
+
+One. No shooting unless someone is about to die.
+Two. Nobody goes outside alone.
+Three. Everything gets written down. Food, water, noises, everything.
+
+That night, you lie on the floor between the shelves, listening to the slow shuffling outside.
+
+"Okay," you whisper to yourself. "One day at a time."
+
+Day 5.
+
+The power goes out.
+
+The lights die, the mini-fridge stops humming, and then the security system starts beeping. Loud, sharp beeps every few seconds. The backup battery is warning you that it's running low.
+
+Outside, the slapping on the shutter gets louder.
+
+Rudy pulls the panel off the wall, and you rip the backup battery wires out. Silence.
+
+You sit in the dark, all three of you holding your breath, until the hands on the shutter slowly stop.
+
+Day 6.
+
+You start to study them through the gap in the shutter.
+
+They don't see well, especially in the dark. They react to movement, but mostly they react to noise. A falling bottle. A barking dog. A car alarm two streets away. Every time, they turn toward the sound and shuffle after it.
+
+That gives Rudy an idea.
+
+The convenience store across the street. Food. Water. Batteries. You can see its broken door from here.
+
+"Tonight," he says.
+
+Day 7.
+
+Midnight. It's time for the first supply run.
+
+But how do you protect yourself without making noise?
+
+Rudy unlocks the cabinet behind the counter and takes out something you've only seen in the catalog. A suppressor. It screws onto the end of the gun barrel.
+
+Here's what the movies get wrong. A suppressor doesn't make a gun silent. It doesn't go "pew." Most suppressed guns are still about as loud as a jackhammer. But Rudy pairs it with a small rifle and special low-powered rounds, and the sound drops to something closer to a nail gun or a loud hand clap. It's not quiet. But it might not carry across the whole city.
+
+"This is the last resort," Rudy says. "Not the plan."
+
+The plan is darkness and silence.
+
+You go out the back door, into the alley, with a crowbar, a flashlight with a red filter, and empty backpacks. Jun stays behind to lock the door after you.
+
+The street is full of shapes. Standing still. Swaying.
+
+You move slowly. Heel to toe. Stay close to the wall.
+
+"Don't run," you tell yourself. "Running is loud."
+
+The convenience store has been half looted, but whoever was here grabbed the obvious things. You find canned soup on the bottom shelf, peanut butter, bags of rice, a case of water, and batteries.
+
+Then your backpack catches a shelf.
+
+A can of beans falls and rolls across the tile floor.
+
+Every head outside turns.
+
+You freeze. Rudy freezes. Twenty seconds feel like an hour. One of them steps through the doorway, sniffs the air, and turns around again.
+
+You wait ten more minutes before you breathe. Then you go home.
+
+Day 8.
+
+Canned soup has never tasted this good.
+
+You set up a rationing system. One can of food per person per day. Water from bottles first, then the water heater. The rice is for later, because cooking it takes water and fire, and fire makes smoke.
+
+Jun turns out to be good at organizing. He makes a chart on the back of a shooting target. You track every meal and every bottle.
+
+Day 10.
+
+More supply runs. Always at night. Always in pairs. Never the same route twice.
+
+You learn to scout before going in. Watch a building for ten minutes. Listen at the door. Tap on the glass and wait. If something inside moves, you leave.
+
+Rudy teaches you something too. "Most people die in the first second," he says. "Because they panic. Slow is smooth. Smooth is fast."
+
+Day 11.
+
+A truck stops outside the store in the afternoon.
+
+Four men get out. They're armed, and they're careful. They've survived this long, and they know what they're doing.
+
+One of them bangs on the shutter.
+
+"We know what's in there!" he shouts. "Guns and ammo. Open up and we'll trade."
+
+Rudy speaks through the gap. "Trade what?"
+
+"Food. Fuel. Whatever you need."
+
+Rudy thinks about it for a long time. Then he says no. He doesn't trust them, and he doesn't know what they'll do with the guns.
+
+The man stares at the shutter. Then he says, "You can't stay in there forever."
+
+They drive away. But now strangers know exactly what this store has inside.
+
+And that makes you a target.
+
+Day 13.
+
+Jun cuts his hand badly on a broken display case. It's deep, and it won't stop bleeding.
+
+You clean it with water and press it closed with butterfly bandages from the first aid kit. But by the next day, it's red, hot, and swollen.
+
+That's an infection. Not a bite. Just ordinary bacteria. But without antibiotics, a simple infection can become dangerous, and it can spread into the blood.
+
+There's a pharmacy two doors down.
+
+Day 14.
+
+The pharmacy is different from the convenience store. The front is shattered, and it's dark inside, even in daylight.
+
+You tap on the glass and wait. Nothing.
+
+You go in. Behind the counter, the shelves are a mess, but you find antiseptic, gauze, painkillers, and a few bottles of antibiotics with the labels still readable.
+
+Then you hear something in the back room. Slow footsteps. A shape in a white pharmacist's coat.
+
+Rudy raises the suppressed rifle.
+
+One shot. It sounds like a sharp clap, and then the clatter of a body falling against a shelf.
+
+Outside, a few heads turn. But not the whole street.
+
+You run back with your hands shaking.
+
+"It worked," you whisper. "It actually worked."
+
+"Once," Rudy says. "Don't get used to it."
+
+Day 16.
+
+The antibiotics start working. Jun's fever drops, and the swelling goes down. He's eating again.
+
+For the first time, it almost feels like you could live like this.
+
+Day 18.
+
+Late at night, you hear an engine. Then voices in the alley behind the store.
+
+It's the men from the truck. And this time, there are more of them.
+
+They start prying at the back door. Metal scraping on metal. They don't care about noise. They have guns, and they think they can handle whatever comes.
+
+Rudy shakes his head. "If we shoot, the whole town comes."
+
+"If we don't," Jun says, "they get in."
+
+Then Rudy grabs something from under the counter. A marine air horn. The kind used on boats.
+
+He climbs the ladder to the roof hatch, aims it over the front street, and holds the button down.
+
+It's the loudest thing you've ever heard.
+
+From every direction, the dead turn. Hundreds of them pour toward the store and down both sides of the building, straight into the alley. You hear shouting. Then engines. Then gunshots, lots of them, getting further away.
+
+The truck is gone. Some of the men didn't make it to it.
+
+But the back door is bent half open from their crowbars, and the dead are pushing through the gap. You and Rudy throw your whole weight against it. A grey arm reaches through and grabs at Rudy's sleeve. He yanks free, and together you slam the door and drag the cabinet back in place.
+
+Rudy sits down on the floor, breathing hard, holding his left arm.
+
+Day 19.
+
+The horn worked. But it worked too well.
+
+The crowd it pulled in doesn't leave. There are hundreds of them pressed against the front shutter now, more than you've ever seen. The steel is starting to bend in the middle.
+
+Every supply run is impossible now. The street is full in every direction.
+
+You count what's left. The water heater is almost empty. There are six cans of food. Three bags of rice.
+
+Day 21.
+
+Rudy is pale. He sweats, even in the cool night. He hasn't let anyone look at his arm.
+
+Day 23.
+
+You finally see it.
+
+That hand at the back door didn't just grab his sleeve. There's a bite mark on his forearm. He's kept it wrapped in a bandage for five days.
+
+Nobody says anything for a long time.
+
+Then Rudy reaches into his pocket and puts a set of keys on the counter.
+
+"My truck's in the garage behind the building," he says. "Half a tank. There's a cabin in the hills, forty miles north. I'll draw you the way."
+
+"We're not leaving you," you say.
+
+"You're not leaving me," he says. "I'm staying. That's different."
+
+Day 24.
+
+Rudy spends the whole day drawing maps. Back roads. Bridges that might be blocked. Farms along the way that might have fuel in their tanks.
+
+He warns you that the truck has been sitting for weeks, and the battery might be weak. It might not start on the first try. He tells you which bags to pack, and what to leave behind.
+
+"Water first," he says. "Then food. Then medicine. Guns last. You can't eat a gun."
+
+That night, he sits by the counter with a cup of cold coffee and tells you stories about the store.
+
+Day 25.
+
+When you wake up, Rudy is gone.
+
+There's a note on the counter.
+
+Don't open the office door. Thank you for the coffee. Go north.
+
+You don't open the door.
+
+Day 26.
+
+You and Jun pack the truck bags. Water. The last cans. Antibiotics. The first aid kit. A flashlight. The map.
+
+You stand in the store for a moment, looking at the shelves. Two hundred guns. Thousands of rounds. And the things that kept you alive were a water heater, a can opener, and a bottle of antibiotics.
+
+Day 27.
+
+The problem is the garage.
+
+It's behind the building, across a narrow alley. And the alley is full of the dead, still there from the night of the air horn.
+
+You need them gone. All at once. Just long enough.
+
+Day 28.
+
+You plan it to the minute.
+
+Jun will go up through the roof hatch with Rudy's air horn. There's still a little left in the can. It'll pull the crowd to the front of the building.
+
+You'll go out the back, cross the alley, open the garage, and start the truck. When the engine starts, Jun comes down the back ladder, and you drive.
+
+"How long do we have?" Jun asks.
+
+"Ninety seconds," you say. "Maybe."
+
+Day 29.
+
+You don't sleep at all.
+
+You keep going over it in your head. Out the door. Twelve steps to the garage. Lift the door. Keys. Engine.
+
+"Twelve steps," you whisper. "Twelve steps. Just twelve steps."
+
+Day 30.
+
+Four in the morning.
+
+Jun climbs the ladder to the roof. He looks back at you once.
+
+"See you in ninety seconds," he says.
+
+The air horn goes off.
+
+It blasts through the dark street. Through the gap in the back door, you watch the alley empty, shape by shape, as they turn and shuffle toward the front of the building.
+
+You go.
+
+One step. Two. Five. The air smells like rot and gunpowder. Ten. Twelve.
+
+The garage door is heavy, and it squeals as you lift it. You throw yourself into the truck, jam the key in, and turn it.
+
+The engine coughs.
+
+And dies.
+
+You turn it again. Click. Nothing.
+
+On the roof, the air horn sputters. Hisses. And stops. The can is empty.
+
+And in the silence, you hear it. Shuffling. Coming back down the alley.
+
+You look up.
+
+Every grey face in the alley is turning toward the open garage.
+
+To be continued.</script>
+<script type="module">
+const $ = id => document.getElementById(id);
+const SR = 24000;
+const BASE = { line: 0.25, para: 0.7, scene: 1.6 }; // seconds at 1×
+const VOICES = [
+  ["American — male", [["am_michael","Michael · smooth, deep ★"],["am_fenrir","Fenrir · rough, older ★"],["am_puck","Puck · young, energetic ★"],["am_echo","Echo"],["am_eric","Eric"],["am_liam","Liam"],["am_onyx","Onyx · low"],["am_adam","Adam"]]],
+  ["American — female", [["af_heart","Heart · warm narrator ★"],["af_bella","Bella · expressive ★"],["af_nicole","Nicole · soft, whispery"],["af_aoede","Aoede"],["af_kore","Kore"],["af_sarah","Sarah"],["af_nova","Nova"],["af_sky","Sky"],["af_jessica","Jessica"],["af_river","River"]]],
+  ["British — male", [["bm_george","George · documentary ★"],["bm_fable","Fable · storyteller"],["bm_lewis","Lewis"],["bm_daniel","Daniel"]]],
+  ["British — female", [["bf_emma","Emma · clear ★"],["bf_isabella","Isabella"],["bf_alice","Alice"],["bf_lily","Lily"]]],
+];
+const ROLES = [
+  {id:"Narrator", label:"Narrator", voice:"am_michael", color:"--r-narrator", sample:"It's a slow Tuesday evening, and you're finishing your shift at a small gun store on Main Street."},
+  {id:"Hero", label:"You (hero)", voice:"am_michael", color:"--r-hero", sample:"Twelve steps. Just twelve steps."},
+  {id:"Rudy", label:"Rudy", voice:"am_fenrir", color:"--r-rudy", sample:"Well. Now everybody knows we're here."},
+  {id:"Jun", label:"Jun", voice:"am_puck", color:"--r-jun", sample:"Lock the door. Something's wrong outside."},
+  {id:"Stranger", label:"Strangers", voice:"am_echo", color:"--r-stranger", sample:"We know what's in there! Open up and we'll trade."},
+];
+const DEFAULT_SCRIPT = $("defaultScript").textContent.trim();
+
+const store = {
+  get(k,d){ try{ const v = localStorage.getItem("booth2."+k); return v===null? d : JSON.parse(v);}catch{ return d; } },
+  set(k,v){ try{ localStorage.setItem("booth2."+k, JSON.stringify(v)); }catch{} }
+};
+const cast = store.get("cast2", Object.fromEntries(ROLES.map(r=>[r.id, r.voice])));
+
+/* ---------- Script splitting (paragraph-level, with dialogue attribution) ---------- */
+const wc = s => (s.trim().match(/\S+/g)||[]).length;
+const isDay = p => /^day\s+\d+\.?$/i.test(p.trim());
+function chunk(text, max=45){
+  const sents = text.match(/[^.!?…]+(?:[.!?…]+["'”’)\]]*|$)/g)?.map(s=>s.trim()).filter(Boolean) || [text];
+  const out=[]; let buf="";
+  for (const s of sents){ if (buf && wc(buf+" "+s) > max){ out.push(buf); buf=s; } else buf = buf ? buf+" "+s : s; }
+  if (buf) out.push(buf);
+  return out;
+}
+function splitScript(text, {cast=true, skipTitle=true}={}){
+  let paras = text.replace(/\r/g,"").split(/\n\s*\n/).map(p=>p.replace(/\s*\n\s*/g," ").trim()).filter(Boolean);
+  if (skipTitle && paras.length > 1 && !/[.!?…"”]$/.test(paras[0]) && wc(paras[0]) <= 14) paras = paras.slice(1);
+  const takes = [];
+  let lastNamed = null, prevDlg = null, prevPrevDlg = null, prevWasDlg = false;
+  const MENTION = /\b(Rudy|Jun)\b|\b(one of them|the man|a man|young man|four men|the men|customers?|stranger)\b/gi;
+  const lastMention = s => { let m, last=null; MENTION.lastIndex=0; while((m=MENTION.exec(s))) last = m[1] ? (m[1][0].toUpperCase()+m[1].slice(1).toLowerCase()) : "Stranger"; return last; };
+  paras.forEach(p => {
+    const QUOTE = /“[^”]+”|"[^"]+"/g;
+    const parts = []; let idx = 0, m;
+    while ((m = QUOTE.exec(p))){
+      const inner = m[0].slice(1,-1).trim();
+      if (wc(inner) < 2 && !/[,!?]$/.test(inner)) continue;
+      if (m.index > idx) parts.push({q:false, t:p.slice(idx, m.index)});
+      parts.push({q:true, t:inner}); idx = m.index + m[0].length;
+    }
+    if (idx < p.length) parts.push({q:false, t:p.slice(idx)});
+    const hasDlg = cast && parts.some(x=>x.q);
+    const prose = parts.filter(x=>!x.q).map(x=>x.t).join(" ");
+    let speaker = null;
+    if (hasDlg){
+      const tag = prose.match(/\b(Rudy|Jun)\s+(says|asks|shouts|whispers|speaks|yells|mutters|tells)/i);
+      if (/\byou\s+(say|whisper|tell|ask|shout|yell|mutter)\b/i.test(prose)) speaker = "Hero";
+      else if (tag) speaker = tag[1][0].toUpperCase()+tag[1].slice(1).toLowerCase();
+      else if (!prose.replace(/[\s.,!?]/g,"") && prevWasDlg && prevPrevDlg && prevPrevDlg !== prevDlg) speaker = prevPrevDlg;
+      else speaker = lastMention(prose) || lastNamed || "Narrator";
+    }
+    const segs = hasDlg
+      ? parts.map(x=>({role: x.q ? speaker : "Narrator", t: x.q ? x.t : x.t.replace(/^[\s,.;:—-]+/,"").trim()})).filter(x=>x.t && /[A-Za-z]/.test(x.t))
+      : [{role:"Narrator", t:p}];
+    segs.forEach((s,i)=> chunk(s.t).forEach((c,j,arr)=> takes.push({text:c, role:s.role, after:"line"})));
+    if (takes.length) takes[takes.length-1].after = "para";
+    if (isDay(p) && takes.length) takes[takes.length-1].after = "para";
+    // mark scene break before Day headings
+    if (isDay(p) && takes.length > 1) { const k = takes.length-2; if (takes[k]) takes[k].after = "scene"; }
+    // update trackers
+    const mention = lastMention(prose);
+    if (hasDlg){ prevPrevDlg = prevDlg; prevDlg = speaker; if (speaker !== "Hero" && speaker !== "Narrator") lastNamed = speaker; else if (mention) lastNamed = mention; }
+    else if (mention) lastNamed = mention;
+    prevWasDlg = hasDlg;
+  });
+  if (takes.length) takes[takes.length-1].after = "end";
+  return takes;
+}
+
+
+/* ---------- UI setup ---------- */
+function voiceOptions(sel, value){
+  for (const [group, list] of VOICES){
+    const og = document.createElement("optgroup"); og.label = group;
+    for (const [id,name] of list){ const o = document.createElement("option"); o.value=id; o.textContent=name; og.appendChild(o); }
+    sel.appendChild(og);
+  }
+  sel.value = value;
+}
+const castBox = $("cast");
+ROLES.forEach(r=>{
+  const row = document.createElement("div"); row.className = "castrow";
+  row.innerHTML = `<span class="who"><i style="background:var(${r.color})"></i>${r.label}</span><select id="cast-${r.id}" aria-label="${r.label} voice"></select><button class="btn icon" aria-label="Hear ${r.label}">▶</button>`;
+  const sel = row.querySelector("select"); voiceOptions(sel, cast[r.id] || r.voice);
+  sel.addEventListener("change", ()=>{ cast[r.id] = sel.value; store.set("cast2", cast); markRoleStale(r.id); });
+  const b = row.querySelector("button"); b.classList.add("hear"); b.disabled = true;
+  b.onclick = async ()=>{ b.disabled = true; setLive(true, r.label);
+    try{ playSamples(trimSilence(await speak(r.sample, r.id))); }catch(e){ showErr(e.message||String(e)); }
+    setLive(false); b.disabled = false; };
+  castBox.appendChild(row);
+});
+$("castOn").checked = store.get("castOn", true);
+const syncCast = ()=> castBox.classList.toggle("off", !$("castOn").checked);
+$("castOn").addEventListener("change", ()=>{ store.set("castOn", $("castOn").checked); syncCast(); syncStats(); });
+syncCast();
+
+$("script").value = store.get("script", DEFAULT_SCRIPT);
+$("speed").value = store.get("speed", 0.95);
+$("gap").value = store.get("gap", 1);
+$("para").value = store.get("para", 1);
+$("fast").checked = store.get("fast2", false);
+$("gpu").checked = store.get("gpu", false);
+if (!("gpu" in navigator)){ $("gpu").checked = false; $("gpu").disabled = true; }
+
+const mult = v => (+v).toFixed(2).replace(/\.?0+$/,"") + "×";
+function syncLabels(){
+  $("speedVal").textContent = mult($("speed").value);
+  $("gapVal").textContent = mult($("gap").value);
+  $("paraVal").textContent = mult($("para").value);
+}
+const fmtClock = s => `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,"0")}`;
+function pauseFor(after){
+  if (after === "end") return 0;
+  if (after === "line") return BASE.line * +$("gap").value;
+  return BASE[after] * +$("para").value;
+}
+function syncStats(){
+  const t = $("script").value.trim();
+  const words = t ? wc(t) : 0;
+  const parts = splitScript(t, {cast: $("castOn").checked});
+  const secs = words / (165 * +$("speed").value) * 60 + parts.reduce((a,p)=>a+pauseFor(p.after),0);
+  $("wc").textContent = words.toLocaleString();
+  $("est").textContent = fmtClock(secs);
+  const tag = $("lenTag");
+  if (!words){ tag.innerHTML=""; return; }
+  if (secs <= 35) tag.innerHTML = '<span class="tag good">Fits a Short</span>';
+  else if (secs <= 60) tag.innerHTML = '<span class="tag warn">Over 35s</span>';
+  else tag.innerHTML = '<span class="tag good">Long-form</span>';
+}
+for (const id of ["speed","gap","para"]) $(id).addEventListener("input", ()=>{ syncLabels(); syncStats(); store.set(id, +$(id).value); if (id!=="speed" && takes.length) rebuildMaster(); });
+$("script").addEventListener("input", ()=>{ syncStats(); store.set("script", $("script").value); });
+$("resetScript").onclick = ()=>{ $("script").value = DEFAULT_SCRIPT; store.set("script", DEFAULT_SCRIPT); syncStats(); };
+syncLabels(); syncStats();
+
+/* ---------- Engine ---------- */
+/* The voice engine runs in a background worker so the page never freezes while it thinks. */
+let tts = null, worker = null, nextId = 1;
+const pending = new Map();
+const WORKER_SRC = `
+let tts = null;
+self.onmessage = async (e) => {
+  const m = e.data;
+  try {
+    if (m.type === "load") {
+      const { KokoroTTS } = await import("https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm");
+      tts = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
+        dtype: m.dtype, device: m.device,
+        progress_callback: (p) => { if (p && p.status === "progress") self.postMessage({ type: "progress", file: p.file, loaded: p.loaded, total: p.total }); }
+      });
+      self.postMessage({ type: "ready" });
+    } else if (m.type === "speak") {
+      const out = await tts.generate(m.text, { voice: m.voice, speed: m.speed });
+      const a = new Float32Array(out.audio);
+      self.postMessage({ type: "audio", id: m.id, audio: a }, [a.buffer]);
+    }
+  } catch (err) {
+    self.postMessage({ type: "error", id: m.id, message: String((err && err.message) || err) });
+  }
+};`;
+function setEngine(msg, pct){ $("engineText").textContent = msg; if (pct!=null) $("meterBar").style.width = Math.max(0,Math.min(100,pct))+"%"; }
+function showErr(msg, soft){ const e=$("err"); e.textContent = msg; e.hidden = !msg; e.style.color = soft ? "var(--accent)" : ""; }
+function setReady(on){ $("go").disabled = !on || recording; document.querySelectorAll(".hear").forEach(b=>b.disabled=!on); document.querySelectorAll('.take [data-a="redo"]').forEach(b=>b.disabled=!on || recording); }
+
+let mainTTS = null;
+function onProgress(files, m){
+  if (!(m && m.status === "progress" && m.total)) return;
+  files[m.file] = [m.loaded, m.total];
+  let l=0,t=0; for (const [a,b] of Object.values(files)){ l+=a; t+=b; }
+  setEngine(`Downloading voice model… ${(l/1e6).toFixed(0)} / ${(t/1e6).toFixed(0)} MB`, l/t*100);
+}
+function onReady(dtype, useGPU, compat){
+  tts = true;
+  setEngine(`Ready · ${dtype === "q8" ? "fast mode" : "full quality"} · ${useGPU ? "graphics card" : "processor"}${compat ? " · compatibility mode" : ""}`, 100);
+  setReady(true);
+  if (pendingNotice) showErr(pendingNotice, true);
+  else if (compat) showErr("Running in compatibility mode, so the page may pause while a line is being recorded. That's normal, just let it work.", true);
+}
+/* Backup path: run the engine on the page itself if this browser won't start the background worker. */
+async function loadMainThread(dtype, useGPU){
+  if (worker){ try{ worker.terminate(); }catch{} worker = null; }
+  setEngine("Starting voice engine…", 0);
+  const files = {};
+  try{
+    const { KokoroTTS } = await import("https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm");
+    mainTTS = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
+      dtype, device: useGPU ? "webgpu" : "wasm", progress_callback: (p)=> onProgress(files, p)
+    });
+    onReady(dtype, useGPU, true);
+  }catch(e){ fallBack(e); }
+}
+function loadEngine(){
+  tts = null; setReady(false);
+  const useGPU = $("gpu").checked && "gpu" in navigator;
+  const dtype = useGPU ? "fp32" : ($("fast").checked ? "q8" : "fp32");
+  setEngine("Downloading voice model (one time only)…", 0);
+  const files = {};
+  try{
+    worker = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], {type:"text/javascript"})), {type:"module"});
+  }catch(e){ return loadMainThread(dtype, useGPU); }
+  worker.onerror = (ev)=>{ ev.preventDefault?.();
+    if (!tts) return loadMainThread(dtype, useGPU);
+    fallBack(new Error(ev.message || "voice engine crashed")); };
+  worker.onmessage = (ev)=>{
+    const m = ev.data;
+    if (m.type === "progress"){ onProgress(files, {...m, status:"progress"}); }
+    else if (m.type === "ready"){ onReady(dtype, useGPU, false); } else if (m.type === "audio"){
+      pending.get(m.id)?.resolve(m.audio); pending.delete(m.id);
+    } else if (m.type === "error"){
+      if (m.id && pending.has(m.id)){
+        const p = pending.get(m.id); pending.delete(m.id);
+        if (/abort|memory|gpu|device/i.test(m.message)){ fallBack(new Error(m.message)); p.reject(new Error("Voice engine restarting with safer settings…")); }
+        else p.reject(new Error(m.message));
+      } else { console.error(m.message); if (!tts) loadMainThread(dtype, useGPU); else fallBack(new Error(m.message)); }
+    }
+  };
+  worker.postMessage({ type:"load", dtype, device: useGPU ? "webgpu" : "wasm" });
+}
+/* A crashed engine can't be reused, so every fallback saves the safer setting and reloads the page fresh. */
+let fellBack = false;
+function fallBack(e){
+  if (fellBack) return; fellBack = true;
+  console.error(e);
+  if ($("gpu").checked){
+    store.set("gpu", false);
+    store.set("notice", "Booth switched to processor mode because your graphics card couldn't run the voice engine. Recording works the same, just slower.");
+    setEngine("Graphics card didn't work. Restarting on processor…", 0);
+    return void setTimeout(()=>location.reload(), 900);
+  }
+  if (!$("fast").checked){
+    store.set("fast2", true);
+    store.set("notice", "Booth switched to Fast mode because full quality ran out of memory on this PC. Close other tabs and untick Fast mode to try full quality again.");
+    setEngine("Not enough memory for full quality. Restarting in fast mode…", 0);
+    return void setTimeout(()=>location.reload(), 900);
+  }
+  setEngine("Voice engine failed to load", 0);
+  showErr("Couldn't start the voice engine. Close other tabs, check your internet, then reload the page. Details: "+(e?.message||e));
+}
+function applySetting(id){ store.set(id === "fast" ? "fast2" : id, $(id).checked); setEngine("Restarting voice engine…", 0); setReady(false); setTimeout(()=>location.reload(), 300); }
+$("gpu").addEventListener("change", ()=> applySetting("gpu"));
+$("fast").addEventListener("change", ()=> applySetting("fast"));
+const pendingNotice = store.get("notice", ""); if (pendingNotice) store.set("notice", "");
+
+function cleanForSpeech(t){
+  return t.replace(/[“”]/g,'"').replace(/[‘’]/g,"'")
+          .replace(/"\s*([^"]{1,20}?)\s*"/g, "$1")   // short in-line quotes like "pew." read as plain words
+          .replace(/\s+/g," ").trim();
+}
+async function speak(text, role){
+  if (!tts) throw new Error("The voice engine isn't ready yet.");
+  const voice = $("castOn").checked ? (cast[role] || cast.Narrator) : cast.Narrator;
+  if (mainTTS){
+    await tick();
+    try{
+      const out = await mainTTS.generate(cleanForSpeech(text), { voice, speed: +$("speed").value });
+      return new Float32Array(out.audio);
+    }catch(e){
+      if (/abort|memory|gpu|device/i.test(String(e?.message||e))){ fallBack(e); throw new Error("Voice engine restarting with safer settings…"); }
+      throw e;
+    }
+  }
+  const id = nextId++;
+  return new Promise((resolve, reject)=>{
+    pending.set(id, {resolve, reject});
+    worker.postMessage({ type:"speak", id, text: cleanForSpeech(text), voice, speed: +$("speed").value });
+  });
+}
+const tick = () => new Promise(r => setTimeout(r, 0));
+function setLive(on, text){ $("lamp").classList.toggle("on", on); $("lampText").textContent = text || (on ? "Recording" : "Off air"); }
+
+/* ---------- Takes + master ---------- */
+let takes = []; // {text, role, after, audio, stale, busy}
+let master = null, masterURL = null, recording = false;
+
+function trimSilence(a){
+  const th = 0.003; let s = 0, e = a.length-1;
+  while (s < e && Math.abs(a[s]) < th) s++;
+  while (e > s && Math.abs(a[e]) < th) e--;
+  s = Math.max(0, s - Math.round(SR*0.03)); e = Math.min(a.length-1, e + Math.round(SR*0.12));
+  const out = a.slice(s, e+1);
+  const f = Math.round(SR*0.01); // 10 ms fades kill clicks at the edges
+  for (let i=0;i<f && i<out.length;i++){ out[i] *= i/f; out[out.length-1-i] *= i/f; }
+  return out;
+}
+function rebuildMaster(){
+  const ready = takes.filter(t=>t.audio);
+  if (!ready.length){ master=null; drawWave(); updateButtons(); return; }
+  const gaps = takes.map(t => Math.round(SR * pauseFor(t.after)));
+  let len = 0; takes.forEach((t,i)=>{ if(t.audio) len += t.audio.length + gaps[i]; });
+  master = new Float32Array(len);
+  let off = 0; takes.forEach((t,i)=>{ if(!t.audio) return; master.set(t.audio, off); off += t.audio.length + gaps[i]; });
+  // gentle normalise to -1 dBFS so different voices sit at one level
+  let peak = 0; for (let i=0;i<master.length;i++){ const v=Math.abs(master[i]); if(v>peak) peak=v; }
+  if (peak > 0){ const g = 0.89/peak; for (let i=0;i<master.length;i++) master[i]*=g; }
+  setAudio(master);
+  drawWave(); updateButtons();
+}
+function markRoleStale(role){ takes.forEach((t,i)=>{ if (t.role===role && t.audio && !t.stale){ t.stale=true; updateRow(i); } }); }
+
+function wav(samples){
+  const buf = new ArrayBuffer(44 + samples.length*2), v = new DataView(buf);
+  const w = (o,s)=>{ for (let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  w(0,"RIFF"); v.setUint32(4, 36+samples.length*2, true); w(8,"WAVE"); w(12,"fmt ");
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true); v.setUint32(24,SR,true);
+  v.setUint32(28,SR*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,"data"); v.setUint32(40,samples.length*2,true);
+  for (let i=0;i<samples.length;i++){ const s = Math.max(-1,Math.min(1,samples[i])); v.setInt16(44+i*2, s<0 ? s*0x8000 : s*0x7fff, true); }
+  return new Blob([buf], {type:"audio/wav"});
+}
+function download(blob, name){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+function baseName(){
+  const first = (takes[0]?.text || "voiceover").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,32);
+  return first || "voiceover";
+}
+const fmt = s => `${Math.floor(s/60)}:${(s%60).toFixed(1).padStart(4,"0")}`;
+
+async function recordTake(i){
+  const t = takes[i];
+  t.busy = true; updateRow(i);
+  try{ t.audio = trimSilence(await speak(t.text, t.role)); t.stale = false; }
+  catch(e){ console.error(e); showErr("Couldn't record take "+(i+1)+": "+(e.message||e)); }
+  t.busy = false; updateRow(i);
+}
+
+const EMPTY = '<p class="empty">Hit Record and every paragraph and line of dialogue shows up here as its own take. Change a line\'s speaker or wording, then re-record just that take.</p>';
+function makeRow(t, i){
+  const role = ROLES.find(r=>r.id===t.role) || ROLES[0];
+  const row = document.createElement("div");
+  row.dataset.i = i;
+  row.className = "take" + (t.stale ? " stale" : "") + (t.busy ? " busy" : "") + (/^day\s+\d+\.?$/i.test(t.text.trim()) ? " daymark" : "");
+  row.innerHTML = `<span class="n">${String(i+1).padStart(3,"0")}</span>
+    <select id="role-${i}" aria-label="Speaker for take ${i+1}" style="--role:var(${role.color})">${ROLES.map(r=>`<option value="${r.id}">${r.label}</option>`).join("")}</select>
+    <textarea id="take-${i}" rows="1" aria-label="Take ${i+1} text"></textarea>
+    <div class="acts"><span class="dur">${t.busy ? "…" : t.audio ? (t.audio.length/SR).toFixed(1)+"s" : "—"}</span>
+      <button class="btn sm" data-a="play" ${t.audio?"":"disabled"}>Play</button>
+      <button class="btn sm" data-a="redo" ${tts && !t.busy && !recording ?"":"disabled"}>${t.stale || !t.audio ? "Record" : "Redo"}</button>
+      <button class="btn sm" data-a="dl" ${t.audio?"":"disabled"}>WAV</button></div>`;
+  const sel = row.querySelector("select"); sel.value = t.role;
+  sel.onchange = ()=>{ t.role = sel.value; t.stale = true; updateRow(i); };
+  const ta = row.querySelector("textarea"); ta.value = t.text;
+  const fit = ()=>{ ta.style.height="auto"; ta.style.height = ta.scrollHeight+2+"px"; };
+  ta.addEventListener("input", ()=>{ t.text = ta.value; if(!t.stale){ t.stale = true; row.classList.add("stale"); row.querySelector('[data-a="redo"]').textContent="Record"; } fit(); });
+  row.querySelector('[data-a="play"]').onclick = ()=> playSamples(t.audio);
+  row.querySelector('[data-a="dl"]').onclick = ()=> download(wav(t.audio), `${baseName()}_${String(i+1).padStart(3,"0")}_${t.role.toLowerCase()}.wav`);
+  row.querySelector('[data-a="redo"]').onclick = async ()=>{ setLive(true, `Take ${i+1}`); await recordTake(i); setLive(false); rebuildMaster(); };
+  requestAnimationFrame(fit);
+  return row;
+}
+function renderTakes(){
+  const box = $("takes");
+  if (!takes.length){ box.innerHTML = EMPTY; return; }
+  const frag = document.createDocumentFragment();
+  takes.forEach((t,i)=> frag.appendChild(makeRow(t,i)));
+  box.replaceChildren(frag);
+}
+function updateRow(i){
+  const old = $("takes").querySelector(`.take[data-i="${i}"]`);
+  if (old) old.replaceWith(makeRow(takes[i], i));
+}
+
+/* ---------- Record ---------- */
+$("go").onclick = async ()=>{
+  const parts = splitScript($("script").value, {cast: $("castOn").checked});
+  if (!parts.length){ showErr("Write or paste a script first."); return; }
+  showErr("");
+  takes = parts.map(p=>({...p, audio:null, stale:false, busy:false}));
+  recording = true; setReady(true);
+  renderTakes(); rebuildMaster();
+  const totalWords = parts.reduce((a,p)=>a+wc(p.text),0); let doneWords = 0; const t0 = performance.now();
+  for (let i=0;i<takes.length;i++){
+    setLive(true, `Take ${i+1} / ${takes.length}`);
+    let eta = "";
+    if (doneWords > 30){ const perWord = (performance.now()-t0)/doneWords; eta = ` · about ${fmtClock((totalWords-doneWords)*perWord/1000)} left`; }
+    setEngine(`Recording take ${i+1} of ${takes.length}${eta}`, i/takes.length*100);
+    await recordTake(i);
+    doneWords += wc(takes[i].text);
+    $("dlLines").disabled = false;
+  }
+  recording = false; setLive(false); setEngine("Done. Building the full voiceover…", 100);
+  await tick();
+  renderTakes(); rebuildMaster(); setReady(true);
+  setEngine("Done. Ready", 100);
+};
+
+/* ---------- Playback ---------- */
+const player = new Audio();
+let scratch = new Audio();
+function setAudio(samples){ const wasPlaying = !player.paused, at = player.currentTime; if (masterURL) URL.revokeObjectURL(masterURL); masterURL = URL.createObjectURL(wav(samples)); player.src = masterURL; player.currentTime = at || 0; if (wasPlaying) player.play(); }
+function playSamples(s){ if(!s) return; player.pause(); scratch.pause(); const u = URL.createObjectURL(wav(s)); scratch = new Audio(u); scratch.onended = ()=>URL.revokeObjectURL(u); scratch.play(); }
+$("play").onclick = ()=>{ scratch.pause(); player.paused ? player.play() : player.pause(); };
+const ICON_PLAY = '<path d="M4 2l12 7-12 7z"/>', ICON_PAUSE = '<rect x="3" y="2" width="4" height="14"/><rect x="11" y="2" width="4" height="14"/>';
+player.addEventListener("play", ()=>{ $("playIcon").innerHTML = ICON_PAUSE; $("play").setAttribute("aria-label","Pause"); loop(); });
+player.addEventListener("pause", ()=>{ $("playIcon").innerHTML = ICON_PLAY; $("play").setAttribute("aria-label","Play"); drawWave(); });
+player.addEventListener("ended", ()=>{ player.currentTime = 0; drawWave(); });
+function loop(){ drawWave(); if (!player.paused) requestAnimationFrame(loop); }
+
+function updateButtons(){
+  const has = !!master;
+  $("play").disabled = !has; $("dlAll").disabled = !has; $("dlLines").disabled = !takes.some(t=>t.audio);
+}
+$("dlAll").onclick = ()=> download(wav(master), baseName()+".wav");
+$("dlLines").onclick = async ()=>{
+  for (let i=0;i<takes.length;i++){ const t = takes[i]; if (!t.audio) continue; download(wav(t.audio), `${baseName()}_${String(i+1).padStart(3,"0")}_${t.role.toLowerCase()}.wav`); await new Promise(r=>setTimeout(r,300)); }
+};
+
+/* ---------- Waveform ---------- */
+const cv = $("wave");
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function drawWave(){
+  const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== Math.round(W*dpr)){ cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); }
+  const c = cv.getContext("2d"); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,W,H);
+  const total = master ? master.length/SR : 0, cur = player.currentTime || 0;
+  $("time").textContent = `${fmt(cur)} / ${fmt(total)}`;
+  if (!master){ c.fillStyle = css("--muted"); c.font = "12px "+css("--mono"); c.fillText("No take yet", 12, H/2+4); return; }
+  const bars = Math.floor(W/3), step = master.length/bars, mid = H/2, playX = total ? cur/total*W : 0;
+  const acc = css("--accent"), mut = css("--muted");
+  for (let b=0;b<bars;b++){
+    let peak = 0; const s = Math.floor(b*step), e = Math.floor((b+1)*step);
+    for (let i=s;i<e;i+=8){ const a = Math.abs(master[i]); if (a>peak) peak=a; }
+    const h = Math.max(1.5, Math.min(1, peak*1.3) * (H-12)/2), played = b*3 < playX;
+    c.fillStyle = played ? acc : mut; c.globalAlpha = played ? 1 : .55;
+    c.fillRect(b*3, mid-h, 2, h*2);
+  }
+  c.globalAlpha = 1;
+  if (cur > 0){ c.fillStyle = css("--ink"); c.fillRect(playX, 0, 1.5, H); }
+}
+cv.addEventListener("click", e=>{ if (!master) return; const r = cv.getBoundingClientRect(); player.currentTime = (e.clientX-r.left)/r.width * master.length/SR; drawWave(); });
+addEventListener("resize", drawWave);
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", drawWave);
+
+drawWave(); updateButtons();
+loadEngine();
+</script>
+</body>
+</html>
