@@ -78,7 +78,7 @@ input[type=range]{accent-color:var(--accent)}
 .who{display:flex;align-items:center;gap:7px;font-weight:600;font-size:14px}
 .who i{width:8px;height:8px;border-radius:2px;flex:none}
 .cast.off .castrow:not(:first-child){opacity:.4}
-.castfx{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:2px 0 8px 15px;border-bottom:1px solid var(--line)}
+.castfx{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:2px 0 8px 15px;border-bottom:1px solid var(--line)}
 .castfx label{display:flex;flex-direction:column;gap:4px;font:400 11px/1 var(--mono);color:var(--muted)}
 .castfx label span{display:flex;justify-content:space-between}
 .castfx output{color:var(--ink);font-variant-numeric:tabular-nums}
@@ -146,6 +146,27 @@ canvas#wave{width:100%;height:96px;display:block;background:var(--surface-2);bor
           <label class="check" style="margin:0"><input type="checkbox" id="castOn"> <span>Character voices</span></label></div>
         <div class="cast" id="cast"></div>
         <p class="note">★ = most natural voices in this engine. Michael sounds the most human of the male voices.</p>
+      </aside>
+
+      <aside class="panel" aria-label="ElevenLabs">
+        <div class="row"><span class="label">ElevenLabs voices</span><span class="val" id="elState">Not connected</span></div>
+        <div class="field">
+          <label class="label" for="elKey">API key</label>
+          <div style="display:flex;gap:8px">
+            <input id="elKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your ElevenLabs API key" style="flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:9px 10px">
+            <button class="btn sm" id="elConnect">Connect</button>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label" for="elModel">Model</label>
+          <select id="elModel">
+            <option value="eleven_v4">Eleven v4 · newest, most natural</option>
+            <option value="eleven_v3">Eleven v3 · most expressive</option>
+            <option value="eleven_multilingual_v2">Multilingual v2 · steady narration</option>
+            <option value="eleven_flash_v2_5">Flash v2.5 · fast, half the credits</option>
+          </select>
+        </div>
+        <p class="note" id="elNote">Once connected, your ElevenLabs voices appear in every Cast dropdown under "ElevenLabs". Your key stays in this browser only and is never put on the website.</p>
       </aside>
 
       <aside class="panel" aria-label="Delivery">
@@ -647,7 +668,16 @@ function voiceOptions(sel, value){
     for (const [id,name] of list){ const o = document.createElement("option"); o.value=id; o.textContent=name; og.appendChild(o); }
     sel.appendChild(og);
   }
+  addElGroup(sel);
   sel.value = value;
+}
+let elVoices = [], elReady = false;
+function addElGroup(sel){
+  sel.querySelector("optgroup.el")?.remove();
+  if (!elVoices.length) return;
+  const og = document.createElement("optgroup"); og.label = "ElevenLabs"; og.className = "el";
+  for (const v of elVoices){ const o = document.createElement("option"); o.value = "el:"+v.id; o.textContent = v.label; og.appendChild(o); }
+  sel.insertBefore(og, sel.firstChild);
 }
 const castBox = $("cast");
 ROLES.forEach(r=>{
@@ -657,12 +687,11 @@ ROLES.forEach(r=>{
     <div class="castfx">
       <label for="pitch-${r.id}"><span>Pitch <output id="pitchv-${r.id}"></output></span><input type="range" id="pitch-${r.id}" min="-6" max="4" step="0.5" value="${fx.pitch}"></label>
       <label for="pace-${r.id}"><span>Pace <output id="pacev-${r.id}"></output></span><input type="range" id="pace-${r.id}" min="0.75" max="1.25" step="0.01" value="${fx.pace}"></label>
-      <label for="age-${r.id}"><span>Age <output id="agev-${r.id}"></output></span><input type="range" id="age-${r.id}" min="0" max="100" step="5" value="${fx.age||0}"></label>
     </div>`;
-  const pi = row.querySelector(`#pitch-${r.id}`), pa = row.querySelector(`#pace-${r.id}`), ag = row.querySelector(`#age-${r.id}`);
-  const showFx = ()=>{ const p=+pi.value; row.querySelector(`#pitchv-${r.id}`).textContent = p===0 ? "normal" : (p>0?"+":"")+p+" (" + (p<0?"deeper":"higher") + ")"; row.querySelector(`#pacev-${r.id}`).textContent = mult(pa.value); row.querySelector(`#agev-${r.id}`).textContent = +ag.value ? "+"+ag.value+"%" : "off"; };
-  const saveFx = ()=>{ castFx[r.id] = {pitch:+pi.value, pace:+pa.value, age:+ag.value}; store.set("castfx2", castFx); showFx(); markRoleStale(r.id); };
-  pi.addEventListener("input", saveFx); pa.addEventListener("input", saveFx); ag.addEventListener("input", saveFx); showFx();
+  const pi = row.querySelector(`#pitch-${r.id}`), pa = row.querySelector(`#pace-${r.id}`);
+  const showFx = ()=>{ const p=+pi.value; row.querySelector(`#pitchv-${r.id}`).textContent = p===0 ? "normal" : (p>0?"+":"")+p+" (" + (p<0?"deeper":"higher") + ")"; row.querySelector(`#pacev-${r.id}`).textContent = mult(pa.value); };
+  const saveFx = ()=>{ castFx[r.id] = {pitch:+pi.value, pace:+pa.value}; store.set("castfx2", castFx); showFx(); markRoleStale(r.id); };
+  pi.addEventListener("input", saveFx); pa.addEventListener("input", saveFx); showFx();
   const sel = row.querySelector("select"); voiceOptions(sel, cast[r.id] || r.voice);
   sel.addEventListener("change", ()=>{ cast[r.id] = sel.value; store.set("cast3", cast); markRoleStale(r.id); });
   const b = row.querySelector("button"); b.classList.add("hear"); b.disabled = true;
@@ -741,7 +770,7 @@ self.onmessage = async (e) => {
 };`;
 function setEngine(msg, pct){ $("engineText").textContent = msg; if (pct!=null) $("meterBar").style.width = Math.max(0,Math.min(100,pct))+"%"; }
 function showErr(msg, soft){ const e=$("err"); e.textContent = msg; e.hidden = !msg; e.style.color = soft ? "var(--accent)" : ""; }
-function setReady(on){ $("go").disabled = !on || recording; document.querySelectorAll(".hear").forEach(b=>b.disabled=!on); document.querySelectorAll('.take [data-a="redo"]').forEach(b=>b.disabled=!on || recording); }
+function setReady(on){ on = on || elReady; $("go").disabled = !on || recording; document.querySelectorAll(".hear").forEach(b=>b.disabled=!on); document.querySelectorAll('.take [data-a="redo"]').forEach(b=>b.disabled=!on || recording); }
 
 let mainTTS = null;
 function onProgress(files, m){
@@ -832,7 +861,6 @@ function cleanForSpeech(t){
 /* Aging layer: the things that make real older voices sound old.
    - vocal tremor: a slow 4–6 Hz wobble in pitch and loudness
    - jitter: tiny random unsteadiness in pitch
-   - hoarseness: a breathy, raspy layer that follows the voice
    - duller top end: older voices carry less sparkle */
 function ageVoice(a, amount){
   const amt = Math.max(0, Math.min(1, amount));
@@ -853,10 +881,6 @@ function ageVoice(a, amount){
     // duller top end
     lp += lpK * (x - lp);
     x = x*(1 - 0.45*amt) + lp*0.45*amt;
-    // hoarse breath that only sounds while the voice is speaking
-    const ax = Math.abs(x); env += (ax > env ? 0.02 : 0.0015) * (ax - env);
-    nz = Math.random()*2 - 1; nzLp += 0.25*(nz - nzLp);
-    x += (nz - nzLp) * env * 0.55 * amt;
     out[i] = x;
   }
   return out;
@@ -868,16 +892,21 @@ function resample(a, ratio){
   for (let i=0;i<n;i++){ const x = i*ratio, j = Math.floor(x), f = x-j; out[i] = (a[j]||0)*(1-f) + (a[j+1]||0)*f; }
   return out;
 }
-async function speak(text, role){
-  if (!tts) throw new Error("The voice engine isn't ready yet.");
+async function speak(text, role, ctx = {}){
   const useCast = $("castOn").checked;
   const picked = useCast ? (cast[role] || cast.Narrator) : cast.Narrator;
-  const fx = (useCast ? castFx[role] : castFx.Narrator) || {pitch:0,pace:1,age:0};
+  const fx = (useCast ? castFx[role] : castFx.Narrator) || {pitch:0,pace:1};
+  if (picked.startsWith("el:")){
+    const ratio = Math.pow(2, (fx.pitch||0)/12);
+    const audio = await elSpeak(text, picked.slice(3), +$("speed").value * (fx.pace||1) / ratio, ctx);
+    return resample(audio, ratio);
+  }
+  if (!tts) throw new Error("Booth's built-in voices aren't loaded yet. Wait for Ready, or pick an ElevenLabs voice.");
   const v = VIRTUAL[picked] || { base:picked, pitch:0, pace:1, age:0 };
   const ratio = Math.pow(2, ((fx.pitch||0) + v.pitch)/12);
   const speed = +$("speed").value * (fx.pace||1) * v.pace / ratio;
   const audio = resample(await rawSpeak(text, v.base, speed), ratio);
-  return ageVoice(audio, v.age + (fx.age||0)/100);
+  return ageVoice(audio, v.age);
 }
 async function rawSpeak(text, voice, speed){
   if (mainTTS){
@@ -950,7 +979,7 @@ const fmt = s => `${Math.floor(s/60)}:${(s%60).toFixed(1).padStart(4,"0")}`;
 async function recordTake(i){
   const t = takes[i];
   t.busy = true; updateRow(i);
-  try{ t.audio = trimSilence(await speak(t.text, t.role)); t.stale = false; }
+  try{ t.audio = trimSilence(await speak(t.text, t.role, { prev: takes[i-1]?.text, next: takes[i+1]?.text })); t.stale = false; }
   catch(e){ console.error(e); showErr("Couldn't record take "+(i+1)+": "+(e.message||e)); }
   t.busy = false; updateRow(i);
 }
@@ -966,7 +995,7 @@ function makeRow(t, i){
     <textarea id="take-${i}" rows="1" aria-label="Take ${i+1} text"></textarea>
     <div class="acts"><span class="dur">${t.busy ? "…" : t.audio ? (t.audio.length/SR).toFixed(1)+"s" : "—"}</span>
       <button class="btn sm" data-a="play" ${t.audio?"":"disabled"}>Play</button>
-      <button class="btn sm" data-a="redo" ${tts && !t.busy && !recording ?"":"disabled"}>${t.stale || !t.audio ? "Record" : "Redo"}</button>
+      <button class="btn sm" data-a="redo" ${(tts || elReady) && !t.busy && !recording ?"":"disabled"}>${t.stale || !t.audio ? "Record" : "Redo"}</button>
       <button class="btn sm" data-a="dl" ${t.audio?"":"disabled"}>WAV</button></div>`;
   const sel = row.querySelector("select"); sel.value = t.role;
   sel.onchange = ()=>{ t.role = sel.value; t.stale = true; updateRow(i); };
@@ -990,6 +1019,73 @@ function updateRow(i){
   const old = $("takes").querySelector(`.take[data-i="${i}"]`);
   if (old) old.replaceWith(makeRow(takes[i], i));
 }
+
+
+/* ---------- ElevenLabs ---------- */
+const EL = "https://api.elevenlabs.io/v1";
+const elKey = () => $("elKey").value.trim();
+async function elFetch(path, opts = {}){
+  const res = await fetch(EL + path, { ...opts, headers: { "xi-api-key": elKey(), ...(opts.headers||{}) } });
+  if (!res.ok){
+    let detail = ""; try{ const j = await res.json(); detail = j?.detail?.message || j?.detail?.status || (typeof j?.detail === "string" ? j.detail : ""); }catch{}
+    if (res.status === 401) throw new Error("ElevenLabs didn't accept the API key. Copy it again from your ElevenLabs profile and reconnect." + (detail ? " ("+detail+")" : ""));
+    if (res.status === 402 || /quota|credit/i.test(detail)) throw new Error("Your ElevenLabs account is out of credits for this. " + detail);
+    if (res.status === 429) throw new Error("ElevenLabs is busy or rate-limiting you. Wait a moment and press Record on the take again.");
+    throw new Error(`ElevenLabs error ${res.status}${detail ? ": "+detail : ""}`);
+  }
+  return res;
+}
+async function elRefreshCredits(){
+  try{
+    const sub = await (await elFetch("/user/subscription")).json();
+    const left = (sub.character_limit ?? 0) - (sub.character_count ?? 0);
+    $("elState").textContent = `${left.toLocaleString()} credits left`;
+  }catch{ $("elState").textContent = "Connected"; }
+}
+async function elConnect(){
+  const key = elKey();
+  if (!key){ showErr("Paste your ElevenLabs API key first."); return; }
+  store.set("elkey", key);
+  $("elConnect").disabled = true; $("elState").textContent = "Connecting…";
+  try{
+    const data = await (await elFetch("/voices")).json();
+    elVoices = (data.voices || []).map(v => {
+      const l = v.labels || {};
+      const tags = [l.age, l.gender, l.accent, l.description || l.descriptive].filter(Boolean).join(", ");
+      return { id: v.voice_id, label: v.name + (tags ? " · " + tags : "") };
+    }).sort((a,b)=> a.label.localeCompare(b.label));
+    elReady = elVoices.length > 0;
+    ROLES.forEach(r => { const sel = $("cast-"+r.id); addElGroup(sel); sel.value = cast[r.id] || r.voice; if (sel.selectedIndex < 0) sel.value = r.voice; });
+    $("elNote").textContent = `${elVoices.length} ElevenLabs voices added to the Cast dropdowns. Tip: voices labelled "old" suit Rudy.`;
+    await elRefreshCredits();
+    setReady(!!tts);
+    showErr("");
+  }catch(e){
+    elReady = false; $("elState").textContent = "Not connected"; showErr(e.message || String(e));
+  }
+  $("elConnect").disabled = false;
+}
+async function elSpeak(text, voiceId, speed, ctx){
+  if (!elReady) throw new Error("Connect ElevenLabs first (paste your API key and press Connect).");
+  const model = $("elModel").value;
+  const body = { text: cleanForSpeech(text), model_id: model, voice_settings: { stability: 0.45, similarity_boost: 0.8 } };
+  if (model !== "eleven_v4") body.voice_settings.speed = Math.max(0.7, Math.min(1.2, speed));
+  if (model !== "eleven_v3"){ if (ctx.prev) body.previous_text = cleanForSpeech(ctx.prev); if (ctx.next) body.next_text = cleanForSpeech(ctx.next); }
+  const res = await elFetch(`/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
+    method: "POST", headers: { "Content-Type": "application/json", "Accept": "audio/mpeg" }, body: JSON.stringify(body)
+  });
+  const buf = await res.arrayBuffer();
+  const decoded = await new OfflineAudioContext(1, 1, SR).decodeAudioData(buf);
+  elCreditsSoon();
+  return decoded.getChannelData(0).slice();
+}
+let creditTimer = 0;
+function elCreditsSoon(){ clearTimeout(creditTimer); creditTimer = setTimeout(elRefreshCredits, 2500); }
+$("elConnect").onclick = elConnect;
+$("elKey").addEventListener("keydown", e => { if (e.key === "Enter") elConnect(); });
+$("elModel").value = store.get("elmodel", "eleven_v4");
+$("elModel").addEventListener("change", ()=> store.set("elmodel", $("elModel").value));
+{ const k = store.get("elkey", ""); if (k){ $("elKey").value = k; elConnect(); } }
 
 /* ---------- Record ---------- */
 $("go").onclick = async ()=>{
