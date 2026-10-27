@@ -78,7 +78,7 @@ input[type=range]{accent-color:var(--accent)}
 .who{display:flex;align-items:center;gap:7px;font-weight:600;font-size:14px}
 .who i{width:8px;height:8px;border-radius:2px;flex:none}
 .cast.off .castrow:not(:first-child){opacity:.4}
-.castfx{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:2px 0 8px 15px;border-bottom:1px solid var(--line)}
+.castfx{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:2px 0 8px 15px;border-bottom:1px solid var(--line)}
 .castfx label{display:flex;flex-direction:column;gap:4px;font:400 11px/1 var(--mono);color:var(--muted)}
 .castfx label span{display:flex;justify-content:space-between}
 .castfx output{color:var(--ink);font-variant-numeric:tabular-nums}
@@ -554,6 +554,7 @@ const $ = id => document.getElementById(id);
 const SR = 24000;
 const BASE = { line: 0.25, para: 0.7, scene: 1.6 }; // seconds at 1×
 const VOICES = [
+  ["Older voices", [["old:gravel","Old man · gravelly ★"],["old:deep","Old man · deep, slow"],["old:british","Old man · British"],["old:woman","Old woman"]]],
   ["American — male", [["am_michael","Michael · smooth, deep ★"],["am_fenrir","Fenrir · rough, older ★"],["am_puck","Puck · young, energetic ★"],["am_echo","Echo"],["am_eric","Eric"],["am_liam","Liam"],["am_onyx","Onyx · low"],["am_adam","Adam"]]],
   ["American — female", [["af_heart","Heart · warm narrator ★"],["af_bella","Bella · expressive ★"],["af_nicole","Nicole · soft, whispery"],["af_aoede","Aoede"],["af_kore","Kore"],["af_sarah","Sarah"],["af_nova","Nova"],["af_sky","Sky"],["af_jessica","Jessica"],["af_river","River"]]],
   ["British — male", [["bm_george","George · documentary ★"],["bm_fable","Fable · storyteller"],["bm_lewis","Lewis"],["bm_daniel","Daniel"]]],
@@ -562,7 +563,7 @@ const VOICES = [
 const ROLES = [
   {id:"Narrator", label:"Narrator", voice:"am_michael", color:"--r-narrator", sample:"It's a slow Tuesday evening, and you're finishing your shift at a small gun store on Main Street."},
   {id:"Hero", label:"You (hero)", voice:"am_michael", color:"--r-hero", sample:"Twelve steps. Just twelve steps."},
-  {id:"Rudy", label:"Rudy", voice:"am_fenrir", color:"--r-rudy", sample:"Well. Now everybody knows we're here."},
+  {id:"Rudy", label:"Rudy", voice:"old:gravel", color:"--r-rudy", sample:"Well. Now everybody knows we're here."},
   {id:"Jun", label:"Jun", voice:"am_puck", color:"--r-jun", sample:"Lock the door. Something's wrong outside."},
   {id:"Stranger", label:"Strangers", voice:"am_echo", color:"--r-stranger", sample:"We know what's in there! Open up and we'll trade."},
 ];
@@ -572,9 +573,16 @@ const store = {
   get(k,d){ try{ const v = localStorage.getItem("booth2."+k); return v===null? d : JSON.parse(v);}catch{ return d; } },
   set(k,v){ try{ localStorage.setItem("booth2."+k, JSON.stringify(v)); }catch{} }
 };
-const cast = store.get("cast2", Object.fromEntries(ROLES.map(r=>[r.id, r.voice])));
-const FX_DEFAULT = { Narrator:{pitch:0,pace:1}, Hero:{pitch:0,pace:1}, Rudy:{pitch:-2.5,pace:0.88}, Jun:{pitch:0,pace:1.03}, Stranger:{pitch:-0.5,pace:1} };
-const castFx = Object.assign({}, FX_DEFAULT, store.get("castfx", {}));
+const cast = store.get("cast3", Object.fromEntries(ROLES.map(r=>[r.id, r.voice])));
+const FX_DEFAULT = { Narrator:{pitch:0,pace:1,age:0}, Hero:{pitch:0,pace:1,age:0}, Rudy:{pitch:0,pace:1,age:0}, Jun:{pitch:0,pace:1.03,age:0}, Stranger:{pitch:-0.5,pace:1,age:0} };
+const castFx = Object.assign({}, FX_DEFAULT, store.get("castfx2", {}));
+/* Booth's own older voices: a base voice plus deeper pitch, slower pace and the aging layer. */
+const VIRTUAL = {
+  "old:gravel":  { base:"am_fenrir",   pitch:-2.5, pace:0.86, age:0.75 },
+  "old:deep":    { base:"am_onyx",     pitch:-1.5, pace:0.82, age:0.6 },
+  "old:british": { base:"bm_george",   pitch:-2,   pace:0.86, age:0.65 },
+  "old:woman":   { base:"bf_isabella", pitch:-1.5, pace:0.86, age:0.7 },
+};
 
 /* ---------- Script splitting (paragraph-level, with dialogue attribution) ---------- */
 const wc = s => (s.trim().match(/\S+/g)||[]).length;
@@ -649,13 +657,14 @@ ROLES.forEach(r=>{
     <div class="castfx">
       <label for="pitch-${r.id}"><span>Pitch <output id="pitchv-${r.id}"></output></span><input type="range" id="pitch-${r.id}" min="-6" max="4" step="0.5" value="${fx.pitch}"></label>
       <label for="pace-${r.id}"><span>Pace <output id="pacev-${r.id}"></output></span><input type="range" id="pace-${r.id}" min="0.75" max="1.25" step="0.01" value="${fx.pace}"></label>
+      <label for="age-${r.id}"><span>Age <output id="agev-${r.id}"></output></span><input type="range" id="age-${r.id}" min="0" max="100" step="5" value="${fx.age||0}"></label>
     </div>`;
-  const pi = row.querySelector(`#pitch-${r.id}`), pa = row.querySelector(`#pace-${r.id}`);
-  const showFx = ()=>{ const p=+pi.value; row.querySelector(`#pitchv-${r.id}`).textContent = p===0 ? "normal" : (p>0?"+":"")+p+" (" + (p<0?"deeper":"higher") + ")"; row.querySelector(`#pacev-${r.id}`).textContent = mult(pa.value); };
-  const saveFx = ()=>{ castFx[r.id] = {pitch:+pi.value, pace:+pa.value}; store.set("castfx", castFx); showFx(); markRoleStale(r.id); };
-  pi.addEventListener("input", saveFx); pa.addEventListener("input", saveFx); showFx();
+  const pi = row.querySelector(`#pitch-${r.id}`), pa = row.querySelector(`#pace-${r.id}`), ag = row.querySelector(`#age-${r.id}`);
+  const showFx = ()=>{ const p=+pi.value; row.querySelector(`#pitchv-${r.id}`).textContent = p===0 ? "normal" : (p>0?"+":"")+p+" (" + (p<0?"deeper":"higher") + ")"; row.querySelector(`#pacev-${r.id}`).textContent = mult(pa.value); row.querySelector(`#agev-${r.id}`).textContent = +ag.value ? "+"+ag.value+"%" : "off"; };
+  const saveFx = ()=>{ castFx[r.id] = {pitch:+pi.value, pace:+pa.value, age:+ag.value}; store.set("castfx2", castFx); showFx(); markRoleStale(r.id); };
+  pi.addEventListener("input", saveFx); pa.addEventListener("input", saveFx); ag.addEventListener("input", saveFx); showFx();
   const sel = row.querySelector("select"); voiceOptions(sel, cast[r.id] || r.voice);
-  sel.addEventListener("change", ()=>{ cast[r.id] = sel.value; store.set("cast2", cast); markRoleStale(r.id); });
+  sel.addEventListener("change", ()=>{ cast[r.id] = sel.value; store.set("cast3", cast); markRoleStale(r.id); });
   const b = row.querySelector("button"); b.classList.add("hear"); b.disabled = true;
   b.onclick = async ()=>{ b.disabled = true; setLive(true, r.label);
     try{ playSamples(trimSilence(await speak(r.sample, r.id))); }catch(e){ showErr(e.message||String(e)); }
@@ -820,6 +829,39 @@ function cleanForSpeech(t){
 }
 /* Pitch shifting: record slightly faster, then stretch the audio back out.
    Stretching lowers the pitch and restores the timing, which makes a voice sound older and heavier. */
+/* Aging layer: the things that make real older voices sound old.
+   - vocal tremor: a slow 4–6 Hz wobble in pitch and loudness
+   - jitter: tiny random unsteadiness in pitch
+   - hoarseness: a breathy, raspy layer that follows the voice
+   - duller top end: older voices carry less sparkle */
+function ageVoice(a, amount){
+  const amt = Math.max(0, Math.min(1, amount));
+  if (!amt) return a;
+  const n = a.length, out = new Float32Array(n);
+  const f = 4.8 + Math.random()*0.8, depth = 0.007*amt, ph = Math.random()*6.28;
+  let pos = 0, jit = 0, jitTarget = 0, env = 0, lp = 0, nz = 0, nzLp = 0;
+  const lpK = 1 - Math.exp(-2*Math.PI*4200/SR);
+  for (let i=0;i<n;i++){
+    const t = i/SR;
+    if ((i & 127) === 0) jitTarget = (Math.random()-0.5) * 0.006 * amt;
+    jit += (jitTarget - jit) * 0.004;
+    pos += 1 + depth*Math.sin(2*Math.PI*f*t + ph) + jit;
+    const j = Math.floor(pos), fr = pos - j;
+    let x = (j+1 < n) ? a[j]*(1-fr) + a[j+1]*fr : 0;
+    // loudness tremor
+    x *= 1 - 0.12*amt*(0.5 + 0.5*Math.sin(2*Math.PI*f*t + ph + 0.8));
+    // duller top end
+    lp += lpK * (x - lp);
+    x = x*(1 - 0.45*amt) + lp*0.45*amt;
+    // hoarse breath that only sounds while the voice is speaking
+    const ax = Math.abs(x); env += (ax > env ? 0.02 : 0.0015) * (ax - env);
+    nz = Math.random()*2 - 1; nzLp += 0.25*(nz - nzLp);
+    x += (nz - nzLp) * env * 0.55 * amt;
+    out[i] = x;
+  }
+  return out;
+}
+
 function resample(a, ratio){
   if (ratio === 1) return a;
   const n = Math.floor(a.length / ratio), out = new Float32Array(n);
@@ -829,11 +871,13 @@ function resample(a, ratio){
 async function speak(text, role){
   if (!tts) throw new Error("The voice engine isn't ready yet.");
   const useCast = $("castOn").checked;
-  const voice = useCast ? (cast[role] || cast.Narrator) : cast.Narrator;
-  const fx = (useCast ? castFx[role] : castFx.Narrator) || {pitch:0,pace:1};
-  const ratio = Math.pow(2, (fx.pitch||0)/12);
-  const speed = +$("speed").value * (fx.pace||1) / ratio;
-  return resample(await rawSpeak(text, voice, speed), ratio);
+  const picked = useCast ? (cast[role] || cast.Narrator) : cast.Narrator;
+  const fx = (useCast ? castFx[role] : castFx.Narrator) || {pitch:0,pace:1,age:0};
+  const v = VIRTUAL[picked] || { base:picked, pitch:0, pace:1, age:0 };
+  const ratio = Math.pow(2, ((fx.pitch||0) + v.pitch)/12);
+  const speed = +$("speed").value * (fx.pace||1) * v.pace / ratio;
+  const audio = resample(await rawSpeak(text, v.base, speed), ratio);
+  return ageVoice(audio, v.age + (fx.age||0)/100);
 }
 async function rawSpeak(text, voice, speed){
   if (mainTTS){
