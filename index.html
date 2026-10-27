@@ -78,6 +78,10 @@ input[type=range]{accent-color:var(--accent)}
 .who{display:flex;align-items:center;gap:7px;font-weight:600;font-size:14px}
 .who i{width:8px;height:8px;border-radius:2px;flex:none}
 .cast.off .castrow:not(:first-child){opacity:.4}
+.castfx{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:2px 0 8px 15px;border-bottom:1px solid var(--line)}
+.castfx label{display:flex;flex-direction:column;gap:4px;font:400 11px/1 var(--mono);color:var(--muted)}
+.castfx label span{display:flex;justify-content:space-between}
+.castfx output{color:var(--ink);font-variant-numeric:tabular-nums}
 
 .btn{border:1px solid var(--line);background:var(--surface-2);border-radius:6px;padding:9px 14px;cursor:pointer;font-weight:500}
 .btn:hover:not(:disabled){border-color:var(--muted)}
@@ -569,6 +573,8 @@ const store = {
   set(k,v){ try{ localStorage.setItem("booth2."+k, JSON.stringify(v)); }catch{} }
 };
 const cast = store.get("cast2", Object.fromEntries(ROLES.map(r=>[r.id, r.voice])));
+const FX_DEFAULT = { Narrator:{pitch:0,pace:1}, Hero:{pitch:0,pace:1}, Rudy:{pitch:-2.5,pace:0.88}, Jun:{pitch:0,pace:1.03}, Stranger:{pitch:-0.5,pace:1} };
+const castFx = Object.assign({}, FX_DEFAULT, store.get("castfx", {}));
 
 /* ---------- Script splitting (paragraph-level, with dialogue attribution) ---------- */
 const wc = s => (s.trim().match(/\S+/g)||[]).length;
@@ -638,7 +644,16 @@ function voiceOptions(sel, value){
 const castBox = $("cast");
 ROLES.forEach(r=>{
   const row = document.createElement("div"); row.className = "castrow";
-  row.innerHTML = `<span class="who"><i style="background:var(${r.color})"></i>${r.label}</span><select id="cast-${r.id}" aria-label="${r.label} voice"></select><button class="btn icon" aria-label="Hear ${r.label}">▶</button>`;
+  const fx = castFx[r.id] || {pitch:0,pace:1};
+  row.innerHTML = `<span class="who"><i style="background:var(${r.color})"></i>${r.label}</span><select id="cast-${r.id}" aria-label="${r.label} voice"></select><button class="btn icon" aria-label="Hear ${r.label}">▶</button>
+    <div class="castfx">
+      <label for="pitch-${r.id}"><span>Pitch <output id="pitchv-${r.id}"></output></span><input type="range" id="pitch-${r.id}" min="-6" max="4" step="0.5" value="${fx.pitch}"></label>
+      <label for="pace-${r.id}"><span>Pace <output id="pacev-${r.id}"></output></span><input type="range" id="pace-${r.id}" min="0.75" max="1.25" step="0.01" value="${fx.pace}"></label>
+    </div>`;
+  const pi = row.querySelector(`#pitch-${r.id}`), pa = row.querySelector(`#pace-${r.id}`);
+  const showFx = ()=>{ const p=+pi.value; row.querySelector(`#pitchv-${r.id}`).textContent = p===0 ? "normal" : (p>0?"+":"")+p+" (" + (p<0?"deeper":"higher") + ")"; row.querySelector(`#pacev-${r.id}`).textContent = mult(pa.value); };
+  const saveFx = ()=>{ castFx[r.id] = {pitch:+pi.value, pace:+pa.value}; store.set("castfx", castFx); showFx(); markRoleStale(r.id); };
+  pi.addEventListener("input", saveFx); pa.addEventListener("input", saveFx); showFx();
   const sel = row.querySelector("select"); voiceOptions(sel, cast[r.id] || r.voice);
   sel.addEventListener("change", ()=>{ cast[r.id] = sel.value; store.set("cast2", cast); markRoleStale(r.id); });
   const b = row.querySelector("button"); b.classList.add("hear"); b.disabled = true;
@@ -660,7 +675,7 @@ $("fast").checked = store.get("fast2", false);
 $("gpu").checked = store.get("gpu", false);
 if (!("gpu" in navigator)){ $("gpu").checked = false; $("gpu").disabled = true; }
 
-const mult = v => (+v).toFixed(2).replace(/\.?0+$/,"") + "×";
+function mult(v){ return (+v).toFixed(2).replace(/\.?0+$/,"") + "×"; }
 function syncLabels(){
   $("speedVal").textContent = mult($("speed").value);
   $("gapVal").textContent = mult($("gap").value);
@@ -803,13 +818,28 @@ function cleanForSpeech(t){
           .replace(/"\s*([^"]{1,20}?)\s*"/g, "$1")   // short in-line quotes like "pew." read as plain words
           .replace(/\s+/g," ").trim();
 }
+/* Pitch shifting: record slightly faster, then stretch the audio back out.
+   Stretching lowers the pitch and restores the timing, which makes a voice sound older and heavier. */
+function resample(a, ratio){
+  if (ratio === 1) return a;
+  const n = Math.floor(a.length / ratio), out = new Float32Array(n);
+  for (let i=0;i<n;i++){ const x = i*ratio, j = Math.floor(x), f = x-j; out[i] = (a[j]||0)*(1-f) + (a[j+1]||0)*f; }
+  return out;
+}
 async function speak(text, role){
   if (!tts) throw new Error("The voice engine isn't ready yet.");
-  const voice = $("castOn").checked ? (cast[role] || cast.Narrator) : cast.Narrator;
+  const useCast = $("castOn").checked;
+  const voice = useCast ? (cast[role] || cast.Narrator) : cast.Narrator;
+  const fx = (useCast ? castFx[role] : castFx.Narrator) || {pitch:0,pace:1};
+  const ratio = Math.pow(2, (fx.pitch||0)/12);
+  const speed = +$("speed").value * (fx.pace||1) / ratio;
+  return resample(await rawSpeak(text, voice, speed), ratio);
+}
+async function rawSpeak(text, voice, speed){
   if (mainTTS){
     await tick();
     try{
-      const out = await mainTTS.generate(cleanForSpeech(text), { voice, speed: +$("speed").value });
+      const out = await mainTTS.generate(cleanForSpeech(text), { voice, speed });
       return new Float32Array(out.audio);
     }catch(e){
       if (/abort|memory|gpu|device/i.test(String(e?.message||e))){ fallBack(e); throw new Error("Voice engine restarting with safer settings…"); }
@@ -819,7 +849,7 @@ async function speak(text, role){
   const id = nextId++;
   return new Promise((resolve, reject)=>{
     pending.set(id, {resolve, reject});
-    worker.postMessage({ type:"speak", id, text: cleanForSpeech(text), voice, speed: +$("speed").value });
+    worker.postMessage({ type:"speak", id, text: cleanForSpeech(text), voice, speed });
   });
 }
 const tick = () => new Promise(r => setTimeout(r, 0));
